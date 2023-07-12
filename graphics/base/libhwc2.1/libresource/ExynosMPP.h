@@ -210,9 +210,9 @@ enum {
 };
 
 enum {
-    MPP_SOURCE_NO_TYPE = 0,
     MPP_SOURCE_COMPOSITION_TARGET,
-    MPP_SOURCE_LAYER
+    MPP_SOURCE_LAYER,
+    MPP_SOURCE_MAX
 };
 
 #ifndef DEFAULT_MPP_DST_FORMAT
@@ -249,6 +249,7 @@ typedef enum {
     PPC_FORMAT_RGB32,
     PPC_FORMAT_YUV8_2,
     PPC_FORMAT_P010,
+    PPC_FORMAT_AFBC,
     PPC_FORMAT_FORMAT_MAX
 } format_index_t;
 

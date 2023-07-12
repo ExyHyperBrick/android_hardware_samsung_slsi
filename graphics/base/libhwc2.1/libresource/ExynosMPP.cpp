@@ -89,7 +89,7 @@ void dump(const restriction_size_t &restrictionSize, String8 &result) {
 }
 
 ExynosMPPSource::ExynosMPPSource()
-    : mSourceType(MPP_SOURCE_NO_TYPE),
+    : mSourceType(MPP_SOURCE_MAX),
     mSource(NULL),
     mOtfMPP(NULL),
     mM2mMPP(NULL)
@@ -386,12 +386,14 @@ bool ExynosMPP::isSupportedBlend(struct exynos_image &src)
 
 bool ExynosMPP::checkRotationCondition(struct exynos_image &src)
 {
-    /* VGRFS case */
+    /* Check only DPP types */
+    if (mPhysicalType >= MPP_DPP_NUM)
+        return true;
+
     /* If DPP has their own restriction, implmemnt module codes */
-    if (mPhysicalType == MPP_DPP_VGRFS) {
-        if ((isFormatYUV420(src.format) == true) &&
-            (isFormat10BitYUV420(src.format) == false))
-                return true;
+    if (mAttr & MPP_ATTR_ROT_90) {
+        if (isFormatYUV420(src.format) == true)
+            return true;
     }
 
     /* Other DPPs */
@@ -412,11 +414,10 @@ bool ExynosMPP::isSupportedTransform(struct exynos_image &src)
     if (src.transform == 0) return true;
 
     /* If MPP need to check additional condition,
-     * 1. Set the mAttr(feature_table) as MPP_ATTR_CUSTOM_ROT bit
-     * 2. implement checkRotationCondition function to check it */
+     * implement checkRotationCondition function to check it */
     /* For example, DPP need to check custom conditons */
-    if (mAttr & MPP_ATTR_CUSTOM_ROT)
-        return checkRotationCondition(src);
+    if (!checkRotationCondition(src))
+        return false;
 
     for(auto transform_map : transform_map_table) {
         if (src.transform & transform_map.hal_tr) {
@@ -2344,7 +2345,7 @@ bool ExynosMPP::hasEnoughCapa(ExynosDisplay *display, struct exynos_image &src, 
     if (mCapacity >= (totalUsedCapacity + requiredCapacity))
         return true;
     else if ((hasHdrInfo(src)) &&
-             (totalUsedCapacity == 0)) {
+             (totalUsedCapacity == 0) && (requiredCapacity < (mCapacity * 1.2))) {
         /* HDR video will be excepted from G2D capa calculation */
         /* if DRM has assigned before, totalUsedCapacity will be non-zero */
         return true;
@@ -2365,6 +2366,8 @@ void ExynosMPP::getPPCIndex(struct exynos_image &src, struct exynos_image &dst,
         formatIndex = PPC_FORMAT_YUV420;
     else if (isFormatYUV422(criteria.format))
         formatIndex = PPC_FORMAT_YUV422;
+    else if (mPhysicalType == MPP_G2D && src.compressed == 1)
+        formatIndex = PPC_FORMAT_AFBC;
     else
         formatIndex = PPC_FORMAT_RGB32;
 

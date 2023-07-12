@@ -256,11 +256,12 @@ int32_t ExynosLayer::doPreProcess()
     exynos_image dst_img;
     setSrcExynosImage(&src_img);
     setDstExynosImage(&dst_img);
-    ExynosMPP *exynosMPPVG = ExynosResourceManager::getExynosMPP(MPP_LOGICAL_DPP_VG);
-    if (exynosMPPVG == NULL) {
-        exynosMPPVG = ExynosResourceManager::getExynosMPP(MPP_LOGICAL_DPP_VGS);
-        if (exynosMPPVG == NULL)
-            exynosMPPVG = ExynosResourceManager::getExynosMPP(MPP_LOGICAL_DPP_VGFS);
+    ExynosMPP *exynosMPPVG = nullptr;
+    if (isFormatYUV(mLayerBuffer->format)) {
+        auto otfMPPs = ExynosResourceManager::getOtfMPPs();
+        auto mpp_it = std::find_if(otfMPPs.begin(), otfMPPs.end(),
+                [&src_img](auto m) { return m->isSrcFormatSupported(src_img); });
+        exynosMPPVG = mpp_it == otfMPPs.end() ? nullptr : *mpp_it;
     }
 
     /* Set HDR Flag */
@@ -347,6 +348,8 @@ int32_t ExynosLayer::doPreProcess()
     if (getDrmMode(mLayerBuffer) != NO_DRM) {
         priority = ePriorityMax;
     } else if (mIsHdrLayer) {
+        priority = ePriorityHigh;
+    } else if (isFormatYUV(mLayerBuffer->format)) {
         priority = ePriorityHigh;
     } else if ((mDisplay->mDisplayControl.cursorSupport == true) &&
                (mCompositionType == HWC2_COMPOSITION_CURSOR)) {
@@ -477,10 +480,6 @@ int32_t ExynosLayer::setLayerCompositionType(int32_t /*hwc2_composition_t*/ type
 
     if (type < 0)
         return HWC2_ERROR_BAD_PARAMETER;
-
-    if (mDisplay->mType == HWC_DISPLAY_PRIMARY)
-        if (type == HWC2_COMPOSITION_SCREENSHOT)
-            type = HWC2_COMPOSITION_DEVICE;
 
     if (type != mCompositionType) {
         setGeometryChanged(GEOMETRY_LAYER_TYPE_CHANGED);
@@ -676,22 +675,32 @@ int32_t ExynosLayer::setLayerPerFrameMetadata(uint32_t numElements,
 int32_t ExynosLayer::setLayerPerFrameMetadataBlobs(uint32_t numElements, const int32_t* keys, const uint32_t* sizes,
         const uint8_t* metadata)
 {
-
+    const uint8_t *metadata_start = metadata;
     for (uint32_t i = 0; i < numElements; i++) {
         HDEBUGLOGD(eDebugLayer, "HWC2: setLayerPerFrameMetadataBlobs key(%d)", keys[i]);
         switch (keys[i]) {
         case HWC2_HDR10_PLUS_SEI:
             if (allocMetaParcel() == NO_ERROR) {
                 ExynosHdrDynamicInfo *info = &(mMetaParcel->sHdrDynamicInfo);
-                Exynos_parsing_user_data_registered_itu_t_t35(info, (void *)&metadata[i]);
-            } else ALOGE("Layer has no metaParcel!");
+                Exynos_parsing_user_data_registered_itu_t_t35(info, (void *)metadata_start);
+            } else {
+                ALOGE("Layer has no metaParcel!");
+                return HWC2_ERROR_UNSUPPORTED;
+            }
             break;
         default:
-            return HWC2_ERROR_UNSUPPORTED;
+            return HWC2_ERROR_BAD_PARAMETER;
         }
+        metadata_start += sizes[i];
     }
+    return HWC2_ERROR_NONE;
+}
 
-    return NO_ERROR;
+int32_t ExynosLayer::setLayerGenericMetadata(hwc2_layer_t __unused layer,
+        uint32_t __unused keyLength, const char* __unused key,
+        bool __unused mandatory, uint32_t __unused valueLength, const uint8_t* __unused value)
+{
+    return HWC2_ERROR_UNSUPPORTED;
 }
 
 int32_t ExynosLayer::setLayerGenericMetadata(hwc2_layer_t __unused layer,
@@ -787,7 +796,11 @@ int32_t ExynosLayer::setSrcExynosImage(exynos_image *src_img)
     src_img->layerFlags = mLayerFlag;
     src_img->acquireFenceFd = mAcquireFence;
     src_img->releaseFenceFd = -1;
+
     src_img->dataSpace = mDataSpace;
+    if(src_img->dataSpace == HAL_DATASPACE_UNKNOWN)
+        src_img->dataSpace = HAL_DATASPACE_V0_SRGB;
+
     src_img->blending = mBlending;
     src_img->transform = mTransform;
     src_img->compressed = mCompressed;
@@ -924,7 +937,7 @@ void ExynosLayer::dump(String8& result)
     result.appendFormat("+---------------+------------+------+------+------------+-----------+---------+------------+--------+------------------------+-----+----------+--------------------+\n");
     result.appendFormat("|     handle    |     fd     |  tr  | AFBC | dataSpace  |  format   |  blend  | planeAlpha | zOrder |          color         | fps | priority | windowIndex        | \n");
     result.appendFormat("+---------------+------------+------+------+------------+-----------+---------+------------+--------+------------------------+-----+----------+--------------------+\n");
-    result.appendFormat("|  %8p | %d, %d, %d | 0x%2x |   %1d  | 0x%8x | %s | 0x%4x  |     %3.1f    |    %d   | 0x%2x, 0x%2x, 0x%2x, 0x%2x |  %2d |    %2d    |    %d               |\n",
+    result.appendFormat("|  %8p | %d, %d, %d | 0x%2x |   %1d  | 0x%8x | %s | 0x%4x  |    %1.3f    |    %d   | 0x%2x, 0x%2x, 0x%2x, 0x%2x |  %2d |    %2d    |    %d               |\n",
             mLayerBuffer, fd, fd1, fd2, mTransform, mCompressed, mDataSpace, getFormatStr(format).string(),
             mBlending, mPlaneAlpha, mZOrder, mColor.r, mColor.g, mColor.b, mColor.a, mFps, mOverlayPriority, mWindowIndex);
     result.appendFormat("|               +------------+------+------+------+-----+-----------+--------++-----+------+-----+--+-----------+------------++----+----------+--------------------+ \n");

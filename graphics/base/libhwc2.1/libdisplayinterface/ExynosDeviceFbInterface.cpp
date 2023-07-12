@@ -211,7 +211,7 @@ int32_t ExynosDeviceFbInterface::makeDPURestrictions() {
             mDPUInfo.overlap[i] = true;
         else
             attrs.insert(r.attr);
-        HDEBUGLOGD(eDebugDefault, "Index : %zu, overlap %d", i, mDPUInfo.overlap[i]);
+        HDEBUGLOGD(eDebugAttrSetting, "Index : %zu, overlap %d", i, mDPUInfo.overlap[i]);
     }
 
     for (i = 0; i < dpuInfo->dpp_cnt; i++){
@@ -299,12 +299,14 @@ int32_t ExynosDeviceFbInterface::updateFeatureTable() {
         // feature table count
         for (uint32_t j = 0; j < featureTableCnt; j++){
             if (feature_table[j].hwType == hwType) {
+                uint64_t attr = 0;
                 // dpp attr count
                 for (int k = 0; k < attrMapCnt; k++) {
                     if (c_r.attr & (1 << dpu_attr_map_table[k].dpp_attr)) {
-                        feature_table[j].attr |= dpu_attr_map_table[k].hwc_attr;
+                        attr |= dpu_attr_map_table[k].hwc_attr;
                     }
                 }
+                feature_table[j].attr = attr;
             }
         }
     }
@@ -322,6 +324,11 @@ int32_t ExynosDeviceFbInterface::updateFeatureTable() {
 
 void ExynosDeviceFbInterface::updateRestrictions()
 {
+#ifdef DISABLE_READ_RESTRICTIONS
+    mUseQuery = false;
+    return;
+#endif
+
     struct dpp_restrictions_info *dpuInfo = &mDPUInfo.dpuInfo;
     int32_t ret = 0;
 

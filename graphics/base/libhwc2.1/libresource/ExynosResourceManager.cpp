@@ -22,7 +22,6 @@
 #include <cutils/properties.h>
 #include "ExynosResourceManager.h"
 #include "ExynosMPPModule.h"
-#include "ExynosResourceRestriction.h"
 #include "ExynosLayer.h"
 #include "ExynosHWCDebug.h"
 #include "ExynosHWCHelper.h"
@@ -37,41 +36,41 @@
 feature_support_t feature_table[] =
 {
     {MPP_DPP_G,
-        MPP_ATTR_BLOCK_MODE | MPP_ATTR_WINDOW_UPDATE | MPP_ATTR_DIM | MPP_ATTR_CUSTOM_ROT
+        MPP_ATTR_BLOCK_MODE | MPP_ATTR_WINDOW_UPDATE | MPP_ATTR_DIM
     },
 
     {MPP_DPP_GF,
-        MPP_ATTR_AFBC | MPP_ATTR_BLOCK_MODE | MPP_ATTR_WINDOW_UPDATE | MPP_ATTR_DIM | MPP_ATTR_CUSTOM_ROT
+        MPP_ATTR_AFBC | MPP_ATTR_BLOCK_MODE | MPP_ATTR_WINDOW_UPDATE | MPP_ATTR_DIM
     },
 
     {MPP_DPP_VG,
-        MPP_ATTR_BLOCK_MODE | MPP_ATTR_WINDOW_UPDATE | MPP_ATTR_DIM | MPP_ATTR_CUSTOM_ROT
+        MPP_ATTR_BLOCK_MODE | MPP_ATTR_WINDOW_UPDATE | MPP_ATTR_DIM
     },
 
     {MPP_DPP_VGS,
-        MPP_ATTR_BLOCK_MODE | MPP_ATTR_WINDOW_UPDATE | MPP_ATTR_SCALE | MPP_ATTR_DIM | MPP_ATTR_CUSTOM_ROT
+        MPP_ATTR_BLOCK_MODE | MPP_ATTR_WINDOW_UPDATE | MPP_ATTR_SCALE | MPP_ATTR_DIM
     },
 
     {MPP_DPP_VGF,
-        MPP_ATTR_AFBC | MPP_ATTR_BLOCK_MODE | MPP_ATTR_WINDOW_UPDATE | MPP_ATTR_DIM | MPP_ATTR_CUSTOM_ROT
+        MPP_ATTR_AFBC | MPP_ATTR_BLOCK_MODE | MPP_ATTR_WINDOW_UPDATE | MPP_ATTR_DIM
     },
 
     {MPP_DPP_VGFS,
-        MPP_ATTR_AFBC | MPP_ATTR_BLOCK_MODE | MPP_ATTR_WINDOW_UPDATE | MPP_ATTR_SCALE | MPP_ATTR_DIM | MPP_ATTR_CUSTOM_ROT
+        MPP_ATTR_AFBC | MPP_ATTR_BLOCK_MODE | MPP_ATTR_WINDOW_UPDATE | MPP_ATTR_SCALE | MPP_ATTR_DIM
     },
 
     {MPP_DPP_VGRFS,
         MPP_ATTR_AFBC | MPP_ATTR_BLOCK_MODE | MPP_ATTR_WINDOW_UPDATE | MPP_ATTR_SCALE |
-        MPP_ATTR_FLIP_H | MPP_ATTR_FLIP_V | MPP_ATTR_ROT_90 | MPP_ATTR_ROT_180 | MPP_ATTR_ROT_270 | MPP_ATTR_CUSTOM_ROT |
+        MPP_ATTR_FLIP_H | MPP_ATTR_FLIP_V | MPP_ATTR_ROT_90 |
         MPP_ATTR_DIM | MPP_ATTR_HDR10
     },
 
     {MPP_MSC,
-        MPP_ATTR_FLIP_H | MPP_ATTR_FLIP_V | MPP_ATTR_ROT_90 | MPP_ATTR_ROT_180 | MPP_ATTR_ROT_270
+        MPP_ATTR_FLIP_H | MPP_ATTR_FLIP_V | MPP_ATTR_ROT_90
     },
 
     {MPP_G2D,
-        MPP_ATTR_AFBC | MPP_ATTR_FLIP_H | MPP_ATTR_FLIP_V | MPP_ATTR_ROT_90 | MPP_ATTR_ROT_180 | MPP_ATTR_ROT_270 |
+        MPP_ATTR_AFBC | MPP_ATTR_FLIP_H | MPP_ATTR_FLIP_V | MPP_ATTR_ROT_90 |
         MPP_ATTR_HDR10 | MPP_ATTR_USE_CAPA
     }
 };
@@ -1072,7 +1071,7 @@ int32_t ExynosResourceManager::validateLayer(uint32_t index, ExynosDisplay *disp
     if (display->mColorTransformHint != HAL_COLOR_TRANSFORM_IDENTITY)
         return eUnSupportedColorTransform;
 #else
-    if ((display->mColorTransformHint == HAL_COLOR_TRANSFORM_ERROR) &&
+    if ((display->mColorTransformHint < 0) &&
         (layer->mOverlayPriority < ePriorityHigh))
         return eUnSupportedColorTransform;
 #endif
@@ -2449,6 +2448,9 @@ int32_t ExynosResourceManager::deliverPerformanceInfo(ExynosDisplay *display)
                     frame->setSourceDimension(j,
                             mppSource->mSrcImg.w, mppSource->mSrcImg.h,
                             mppSource->mSrcImg.format);
+
+                    if (mppSource->mSrcImg.compressed == 1)
+                        frame->setAttribute(j, AcrylicCanvas::ATTR_COMPRESSED);
 
                     hwc_rect_t src_area;
                     src_area.left = mppSource->mSrcImg.x;

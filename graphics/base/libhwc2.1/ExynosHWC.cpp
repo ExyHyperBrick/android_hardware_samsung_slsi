@@ -229,6 +229,9 @@ int32_t exynos_createLayer(hwc2_device_t *dev,
 int32_t exynos_createVirtualDisplay(hwc2_device_t *dev, uint32_t width, uint32_t height,
         int32_t *format, hwc2_display_t *outDisplay)
 {
+    if (format == nullptr)
+        return HWC2_ERROR_BAD_PARAMETER;
+
     ExynosDevice *exynosDevice = checkDevice(dev);
     *outDisplay = getDisplayId(HWC_DISPLAY_VIRTUAL, 0);
 
@@ -456,9 +459,9 @@ int32_t exynos_getDozeSupport(hwc2_device_t *dev, hwc2_display_t display,
 }
 
 int32_t exynos_getHdrCapabilities(hwc2_device_t *dev, hwc2_display_t display,
-        uint32_t* __unused outNumTypes,
-        int32_t* __unused outTypes, float* __unused outMaxLuminance,
-        float* __unused outMaxAverageLuminance, float* __unused outMinLuminance)
+        uint32_t* outNumTypes,
+        int32_t* outTypes, float* outMaxLuminance,
+        float* outMaxAverageLuminance, float* outMinLuminance)
 {
     ExynosDevice *exynosDevice = checkDevice(dev);
 
@@ -618,6 +621,9 @@ int32_t exynos_setColorMode(hwc2_device_t *dev, hwc2_display_t display, int32_t 
 int32_t exynos_setColorTransform(hwc2_device_t *dev, hwc2_display_t display,
         const float* matrix, int32_t hint)
 {
+    if (matrix == nullptr)
+        return HWC2_ERROR_BAD_PARAMETER;
+
     ExynosDevice *exynosDevice = checkDevice(dev);
 
     if (exynosDevice) {
@@ -647,7 +653,7 @@ int32_t exynos_setCursorPosition(hwc2_device_t *dev, hwc2_display_t display,
 }
 
 int32_t exynos_setLayerBlendMode(hwc2_device_t *dev, hwc2_display_t display,
-        hwc2_layer_t __unused layer, int32_t /*hwc2_blend_mode_t*/ __unused mode)
+        hwc2_layer_t layer, int32_t /*hwc2_blend_mode_t*/ mode)
 {
     ExynosDevice *exynosDevice = checkDevice(dev);
 
@@ -732,8 +738,8 @@ int32_t exynos_setLayerDataspace(hwc2_device_t *dev, hwc2_display_t display, hwc
     return HWC2_ERROR_BAD_LAYER;
 }
 
-int32_t exynos_setLayerDisplayFrame(hwc2_device_t *dev, hwc2_display_t __unused display,
-        hwc2_layer_t __unused layer, hwc_rect_t __unused frame)
+int32_t exynos_setLayerDisplayFrame(hwc2_device_t *dev, hwc2_display_t display,
+        hwc2_layer_t layer, hwc_rect_t frame)
 {
     ExynosDevice *exynosDevice = checkDevice(dev);
 
@@ -749,8 +755,8 @@ int32_t exynos_setLayerDisplayFrame(hwc2_device_t *dev, hwc2_display_t __unused 
     return HWC2_ERROR_BAD_LAYER;
 }
 
-int32_t exynos_setLayerPlaneAlpha(hwc2_device_t __unused *dev, hwc2_display_t __unused display,
-        hwc2_layer_t __unused layer, float __unused alpha)
+int32_t exynos_setLayerPlaneAlpha(hwc2_device_t *dev, hwc2_display_t display,
+        hwc2_layer_t layer, float alpha)
 {
     ExynosDevice *exynosDevice = checkDevice(dev);
 
@@ -773,8 +779,8 @@ int32_t exynos_setLayerSidebandStream(hwc2_device_t __unused *dev, hwc2_display_
     return HWC2_ERROR_NONE;
 }
 
-int32_t exynos_setLayerSourceCrop(hwc2_device_t __unused *dev, hwc2_display_t __unused display,
-        hwc2_layer_t __unused layer, hwc_frect_t __unused crop)
+int32_t exynos_setLayerSourceCrop(hwc2_device_t *dev, hwc2_display_t display,
+        hwc2_layer_t layer, hwc_frect_t crop)
 {
     ExynosDevice *exynosDevice = checkDevice(dev);
 
@@ -790,8 +796,8 @@ int32_t exynos_setLayerSourceCrop(hwc2_device_t __unused *dev, hwc2_display_t __
     return HWC2_ERROR_BAD_LAYER;
 }
 
-int32_t exynos_setLayerSurfaceDamage(hwc2_device_t __unused *dev, hwc2_display_t __unused display,
-        hwc2_layer_t __unused layer, hwc_region_t __unused damage)
+int32_t exynos_setLayerSurfaceDamage(hwc2_device_t *dev, hwc2_display_t display,
+        hwc2_layer_t layer, hwc_region_t damage)
 {
     ExynosDevice *exynosDevice = checkDevice(dev);
 
@@ -807,8 +813,8 @@ int32_t exynos_setLayerSurfaceDamage(hwc2_device_t __unused *dev, hwc2_display_t
     return HWC2_ERROR_BAD_LAYER;
 }
 
-int32_t exynos_setLayerTransform(hwc2_device_t *dev, hwc2_display_t __unused display,
-        hwc2_layer_t __unused layer, int32_t /*hwc_transform_t*/ __unused transform)
+int32_t exynos_setLayerTransform(hwc2_device_t *dev, hwc2_display_t display,
+        hwc2_layer_t layer, int32_t /*hwc_transform_t*/ transform)
 {
     ExynosDevice *exynosDevice = checkDevice(dev);
 
@@ -824,8 +830,8 @@ int32_t exynos_setLayerTransform(hwc2_device_t *dev, hwc2_display_t __unused dis
     return HWC2_ERROR_BAD_LAYER;
 }
 
-int32_t exynos_setLayerVisibleRegion(hwc2_device_t *dev, hwc2_display_t __unused display,
-        hwc2_layer_t __unused layer, hwc_region_t __unused visible)
+int32_t exynos_setLayerVisibleRegion(hwc2_device_t *dev, hwc2_display_t display,
+        hwc2_layer_t layer, hwc_region_t visible)
 {
     ExynosDevice *exynosDevice = checkDevice(dev);
 
@@ -872,8 +878,8 @@ int32_t exynos_setOutputBuffer(hwc2_device_t *dev, hwc2_display_t display,
     return HWC2_ERROR_BAD_DISPLAY;
 }
 
-int32_t exynos_setPowerMode(hwc2_device_t *dev, hwc2_display_t __unused display,
-        int32_t /*hwc2_power_mode_t*/ __unused mode)
+int32_t exynos_setPowerMode(hwc2_device_t *dev, hwc2_display_t display,
+        int32_t /*hwc2_power_mode_t*/ mode)
 {
     if (mode < 0)
         return HWC2_ERROR_BAD_PARAMETER;
@@ -890,8 +896,8 @@ int32_t exynos_setPowerMode(hwc2_device_t *dev, hwc2_display_t __unused display,
     return HWC2_ERROR_BAD_DISPLAY;
 }
 
-int32_t exynos_setVsyncEnabled(hwc2_device_t *dev, hwc2_display_t __unused display,
-        int32_t /*hwc2_vsync_t*/ __unused enabled)
+int32_t exynos_setVsyncEnabled(hwc2_device_t *dev, hwc2_display_t display,
+        int32_t /*hwc2_vsync_t*/ enabled)
 {
     ExynosDevice *exynosDevice = checkDevice(dev);
 
@@ -990,6 +996,9 @@ int32_t exynos_setLayerPerFrameMetadata(hwc2_device_t *dev, hwc2_display_t displ
         hwc2_layer_t layer, uint32_t numElements,
         const int32_t* /*hw2_per_frame_metadata_key_t*/ keys,
         const float* metadata) {
+    if ((keys == nullptr) || (metadata == nullptr))
+        return HWC2_ERROR_BAD_PARAMETER;
+
     ExynosDevice *exynosDevice = checkDevice(dev);
     if (exynosDevice) {
         ExynosDisplay *exynosDisplay = checkDisplay(exynosDevice, display);
@@ -1005,10 +1014,13 @@ int32_t exynos_setLayerPerFrameMetadata(hwc2_device_t *dev, hwc2_display_t displ
     return HWC2_ERROR_BAD_DISPLAY;
 }
 
-int32_t exynos_getPerFrameMetadataKeys(hwc2_device_t* __unused dev, hwc2_display_t __unused display,
+int32_t exynos_getPerFrameMetadataKeys(hwc2_device_t* dev, hwc2_display_t __unused display,
         uint32_t* outNumKeys, int32_t* /*hwc2_per_frame_metadata_key_t*/ outKeys) {
 
     ExynosDevice *exynosDevice = checkDevice(dev);
+    if (exynosDevice == NULL)
+        return HWC2_ERROR_BAD_DISPLAY;
+
     ExynosResourceManager *resourceManager = exynosDevice->mResourceManager;
 
     uint32_t numKeys = 0;
@@ -1108,6 +1120,9 @@ int32_t exynos_setLayerPerFrameMetadataBlobs(hwc2_device_t* dev, hwc2_display_t 
         hwc2_layer_t layer, uint32_t numElements, const int32_t* keys, const uint32_t* sizes,
         const uint8_t* metadata)
 {
+    if ((keys == nullptr) || (sizes == nullptr) || (metadata == nullptr))
+        return HWC2_ERROR_BAD_PARAMETER;
+
     ExynosDevice *exynosDevice = checkDevice(dev);
 
     if (exynosDevice) {

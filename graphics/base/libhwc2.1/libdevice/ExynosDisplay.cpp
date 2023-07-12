@@ -319,6 +319,10 @@ ExynosDisplay::ExynosDisplay(uint32_t index, ExynosDevice *device)
     mNumMaxPriorityAllowed(1),
     mCursorIndex(-1),
     mColorTransformHint(HAL_COLOR_TRANSFORM_IDENTITY),
+    mHdrTypeNum(0),
+    mMaxLuminance(0),
+    mMaxAverageLuminance(0),
+    mMinLuminance(0),
     mHWC1LayerList(NULL),
     /* Support DDI scalser */
     mOldScalerMode(0),
@@ -505,26 +509,6 @@ void ExynosDisplay::destroyLayers() {
         ExynosLayer *layer = *it;
         it = mIgnoreLayers.erase(it);
         delete layer;
-    }
-}
-
-/**
- * @param index
- * @return ExynosLayer
- */
-ExynosLayer *ExynosDisplay::getLayer(uint32_t index) {
-
-    if (mLayers.size() <= index) {
-        HWC_LOGE(this, "HWC2 : %s : size(%zu), index(%d), wrong layer request!",
-                __func__, mLayers.size(), index);
-        return NULL;
-    }
-    if(mLayers[index] != NULL) {
-        return mLayers[index];
-    }
-    else {
-        HWC_LOGE(this, "HWC2 : %s : %d, wrong layer request!", __func__, __LINE__);
-        return NULL;
     }
 }
 
@@ -1212,7 +1196,6 @@ int32_t ExynosDisplay::configureHandle(ExynosLayer &layer, int fence_fd, exynos_
     int32_t ret = NO_ERROR;
     private_handle_t *handle = NULL;
     int32_t blending = 0x0100;
-    int32_t planeAlpha = 0;
     uint32_t x = 0, y = 0;
     uint32_t w = WIDTH(layer.mPreprocessedInfo.displayFrame);
     uint32_t h = HEIGHT(layer.mPreprocessedInfo.displayFrame);
@@ -1222,7 +1205,6 @@ int32_t ExynosDisplay::configureHandle(ExynosLayer &layer, int fence_fd, exynos_
     unsigned int luminanceMax = 0;
 
     blending = layer.mBlending;
-    planeAlpha = (int)(255 * layer.mPlaneAlpha);
     otfMPP = layer.mOtfMPP;
     m2mMPP = layer.mM2mMPP;
 
@@ -1290,20 +1272,16 @@ int32_t ExynosDisplay::configureHandle(ExynosLayer &layer, int fence_fd, exynos_
     cfg.dst.f_w = mXres;
     cfg.dst.f_h = mYres;
 
-    cfg.plane_alpha = 255;
-    if ((planeAlpha >= 0) && (planeAlpha < 255)) {
-        cfg.plane_alpha = planeAlpha;
-    }
+    cfg.plane_alpha = layer.mPlaneAlpha;
     cfg.blending = blending;
     cfg.assignedMPP = otfMPP;
 
     if (layer.mIsDimLayer) {
         cfg.state = cfg.WIN_STATE_COLOR;
         hwc_color_t color = layer.mColor;
-        cfg.color = (color.r << 16) | (color.g << 8) | color.b;
-        if (!((planeAlpha >= 0) && (planeAlpha <= 255)))
-            cfg.plane_alpha = 0;
-        DISPLAY_LOGD(eDebugWinConfig, "HWC2: DIM layer is enabled, alpha : %d", cfg.plane_alpha);
+        cfg.color = (color.a << 24) | (color.r << 16) | (color.g << 8) | color.b;
+        DISPLAY_LOGD(eDebugWinConfig, "HWC2: DIM layer is enabled, color: %d, alpha : %f",
+                cfg.color, cfg.plane_alpha);
         return ret;
     }
 
@@ -1667,7 +1645,7 @@ int32_t ExynosDisplay::configureOverlay(ExynosCompositionInfo &compositionInfo)
 
     config.acq_fence =
         hwcCheckFenceDebug(this, FENCE_TYPE_SRC_ACQUIRE, FENCE_IP_DPP, compositionInfo.mAcquireFence);
-    config.plane_alpha = 255;
+    config.plane_alpha = 1;
     config.dataspace = compositionInfo.mSrcImg.dataSpace;
     config.hdr_enable = true;
 
@@ -2019,7 +1997,7 @@ int ExynosDisplay::checkConfigDstChanged(const exynos_dpu_data &lastConfigsData,
         (lastConfigsData.configs[index].blending != newConfigsData.configs[index].blending) ||
         (lastConfigsData.configs[index].plane_alpha != newConfigsData.configs[index].plane_alpha)) {
         DISPLAY_LOGD(eDebugWindowUpdate, "damage region is skip, but other configuration except dst was changed");
-        DISPLAY_LOGD(eDebugWindowUpdate, "\tstate[%d, %d], fd[%d, %d], format[0x%8x, 0x%8x], blending[%d, %d], plane_alpha[%d, %d]",
+        DISPLAY_LOGD(eDebugWindowUpdate, "\tstate[%d, %d], fd[%d, %d], format[0x%8x, 0x%8x], blending[%d, %d], plane_alpha[%f, %f]",
                 lastConfigsData.configs[index].state, newConfigsData.configs[index].state,
                 lastConfigsData.configs[index].fd_idma[0], newConfigsData.configs[index].fd_idma[0],
                 lastConfigsData.configs[index].format, newConfigsData.configs[index].format,
@@ -3186,7 +3164,7 @@ int32_t ExynosDisplay::setColorTransform(
 #ifdef HWC_SUPPORT_COLOR_TRANSFORM
     int ret = mDisplayInterface->setColorTransform(matrix, hint);
     if (ret != HWC2_ERROR_NONE) {
-        mColorTransformHint = HAL_COLOR_TRANSFORM_ERROR;
+        mColorTransformHint = ret;
         setGeometryChanged(GEOMETRY_DISPLAY_COLOR_TRANSFORM_CHANGED);
     }
     return ret;
@@ -3261,7 +3239,7 @@ int32_t ExynosDisplay::getDisplayCapabilities(uint32_t* outNumCapabilities,
     }
     if (capabilityNum != *outNumCapabilities) {
         ALOGE("%s:: invalid outNumCapabilities(%d), should be(%d)", __func__, *outNumCapabilities, capabilityNum);
-        return HWC2_ERROR_NONE;
+        return HWC2_ERROR_BAD_PARAMETER;
     }
 
     uint32_t index = 0;
@@ -3361,8 +3339,7 @@ int32_t ExynosDisplay::setActiveConfigWithConstraints(hwc2_config_t config,
     getActiveConfig(&activeConfig);
 
     if (vsyncPeriodChangeConstraints->seamlessRequired) {
-        if (mDisplayConfigs[activeConfig].width != mDisplayConfigs[config].width
-                || mDisplayConfigs[activeConfig].height != mDisplayConfigs[config].height) {
+        if (mDisplayConfigs[activeConfig].groupId != mDisplayConfigs[config].groupId) {
             DISPLAY_LOGD(eDebugDisplayConfig, "Case : Seamless is not allowed");
             return HWC2_ERROR_SEAMLESS_NOT_ALLOWED;
         }
@@ -3848,13 +3825,13 @@ void ExynosDisplay::dumpConfig(const exynos_win_config_data &c)
     DISPLAY_LOGD(eDebugWinConfig|eDebugSkipStaicLayer, "\tstate = %u", c.state);
     if (c.state == c.WIN_STATE_COLOR) {
         DISPLAY_LOGD(eDebugWinConfig|eDebugSkipStaicLayer,
-                "\t\tx = %d, y = %d, width = %d, height = %d, color = %u, alpha = %u\n",
+                "\t\tx = %d, y = %d, width = %d, height = %d, color = %u, alpha = %f\n",
                 c.dst.x, c.dst.y, c.dst.w, c.dst.h, c.color, c.plane_alpha);
     } else/* if (c.state != c.WIN_STATE_DISABLED) */{
         DISPLAY_LOGD(eDebugWinConfig|eDebugSkipStaicLayer, "\t\tfd = (%d, %d, %d), acq_fence = %d, rel_fence = %d "
                 "src_f_w = %u, src_f_h = %u, src_x = %d, src_y = %d, src_w = %u, src_h = %u, "
                 "dst_f_w = %u, dst_f_h = %u, dst_x = %d, dst_y = %d, dst_w = %u, dst_h = %u, "
-                "format = %u, pa = %d, transform = %d, dataspace = 0x%8x, hdr_enable = %d, blending = %u, "
+                "format = %u, pa = %f, transform = %d, dataspace = 0x%8x, hdr_enable = %d, blending = %u, "
                 "protection = %u, compression = %d, compression_src = %d, transparent(x:%d, y:%d, w:%d, h:%d), "
                 "block(x:%d, y:%d, w:%d, h:%d)",
                 c.fd_idma[0], c.fd_idma[1], c.fd_idma[2],
@@ -3898,13 +3875,13 @@ void ExynosDisplay::dumpConfig(String8 &result, const exynos_win_config_data &c)
 {
     result.appendFormat("\tstate = %u\n", c.state);
     if (c.state == c.WIN_STATE_COLOR) {
-        result.appendFormat("\t\tx = %d, y = %d, width = %d, height = %d, color = %u, alpha = %u\n",
+        result.appendFormat("\t\tx = %d, y = %d, width = %d, height = %d, color = %u, alpha = %f\n",
                 c.dst.x, c.dst.y, c.dst.w, c.dst.h, c.color, c.plane_alpha);
     } else/* if (c.state != c.WIN_STATE_DISABLED) */{
         result.appendFormat("\t\tfd = (%d, %d, %d), acq_fence = %d, rel_fence = %d "
                 "src_f_w = %u, src_f_h = %u, src_x = %d, src_y = %d, src_w = %u, src_h = %u, "
                 "dst_f_w = %u, dst_f_h = %u, dst_x = %d, dst_y = %d, dst_w = %u, dst_h = %u, "
-                "format = %u, pa = %d, transform = %d, dataspace = 0x%8x, hdr_enable = %d, blending = %u, "
+                "format = %u, pa = %f, transform = %d, dataspace = 0x%8x, hdr_enable = %d, blending = %u, "
                 "protection = %u, compression = %d, compression_src = %d, transparent(x:%d, y:%d, w:%d, h:%d), "
                 "block(x:%d, y:%d, w:%d, h:%d)\n",
                 c.fd_idma[0], c.fd_idma[1], c.fd_idma[2],
@@ -3922,13 +3899,13 @@ void ExynosDisplay::printConfig(exynos_win_config_data &c)
 {
     ALOGD("\tstate = %u", c.state);
     if (c.state == c.WIN_STATE_COLOR) {
-        ALOGD("\t\tx = %d, y = %d, width = %d, height = %d, color = %u, alpha = %u\n",
+        ALOGD("\t\tx = %d, y = %d, width = %d, height = %d, color = %u, alpha = %f\n",
                 c.dst.x, c.dst.y, c.dst.w, c.dst.h, c.color, c.plane_alpha);
     } else/* if (c.state != c.WIN_STATE_DISABLED) */{
         ALOGD("\t\tfd = (%d, %d, %d), acq_fence = %d, rel_fence = %d "
                 "src_f_w = %u, src_f_h = %u, src_x = %d, src_y = %d, src_w = %u, src_h = %u, "
                 "dst_f_w = %u, dst_f_h = %u, dst_x = %d, dst_y = %d, dst_w = %u, dst_h = %u, "
-                "format = %u, pa = %d, transform = %d, dataspace = 0x%8x, hdr_enable = %d, blending = %u, "
+                "format = %u, pa = %f, transform = %d, dataspace = 0x%8x, hdr_enable = %d, blending = %u, "
                 "protection = %u, compression = %d, compression_src = %d, transparent(x:%d, y:%d, w:%d, h:%d), "
                 "block(x:%d, y:%d, w:%d, h:%d)",
                 c.fd_idma[0], c.fd_idma[1], c.fd_idma[2],
@@ -4442,6 +4419,11 @@ int ExynosDisplay::handleWindowUpdate()
     unsigned int excp;
 
     mDpuData.enable_win_update = false;
+    /* Init with full size */
+    mDpuData.win_update_region.x = 0;
+    mDpuData.win_update_region.w = mXres;
+    mDpuData.win_update_region.y = 0;
+    mDpuData.win_update_region.h = mYres;
 
     if (exynosHWCControl.windowUpdate != 1) return 0;
 
@@ -4813,8 +4795,42 @@ int32_t ExynosDisplay::getHdrCapabilities(uint32_t* outNumTypes,
         float* outMaxAverageLuminance, float* outMinLuminance)
 {
     DISPLAY_LOGD(eDebugHWC, "HWC2: %s, %d", __func__, __LINE__);
-    return mDisplayInterface->getHdrCapabilities(outNumTypes, outTypes,
-                    outMaxLuminance, outMaxAverageLuminance, outMinLuminance);
+
+    if (outNumTypes == NULL || outMaxLuminance == NULL ||
+            outMaxAverageLuminance == NULL || outMinLuminance == NULL) {
+        return HWC2_ERROR_BAD_PARAMETER;
+    }
+
+    if (outTypes == NULL) {
+        /*
+         * This function is always called twice.
+         * outTypes is NULL in the first call and
+         * outType is valid pointer in the second call.
+         * Get information only in the first call.
+         * Use saved information in the second call.
+         */
+        if (mDisplayInterface->updateHdrCapabilities() != NO_ERROR)
+            return HWC2_ERROR_BAD_CONFIG;
+    }
+
+    *outMaxLuminance = mMaxLuminance;
+    *outMaxAverageLuminance = mMaxAverageLuminance;
+    *outMinLuminance = mMinLuminance;
+
+    if (outTypes == NULL)
+        *outNumTypes = mHdrTypeNum;
+
+    if (outTypes != NULL) {
+        if (*outNumTypes != mHdrTypeNum) {
+            ALOGE("%s:: Invalid parameter (outNumTypes: %d, mHdrTypeNum: %d",
+                    __func__, *outNumTypes, mHdrTypeNum);
+            return HWC2_ERROR_BAD_PARAMETER;
+        }
+        for(uint32_t i = 0; i < mHdrTypeNum; i++) {
+            outTypes[i] = mHdrTypes[i];
+        }
+    }
+    return HWC2_ERROR_NONE;
 }
 
 // Support DDI scalser
